@@ -1,5 +1,9 @@
 import * as cache from "@actions/cache";
 import * as core from "@actions/core";
+import { RequestError } from "@octokit/request-error"
+import { OctokitResponse } from "@octokit/types"
+
+const { Octokit } = require("@octokit/action");
 
 import { Outputs, RefKey, State } from "../constants";
 
@@ -31,6 +35,29 @@ export function setOutputAndState(key: string, cacheKey?: string): void {
     setCacheHitOutput(isExactKeyMatch(key, cacheKey));
     // Store the matched cache key if it exists
     cacheKey && setCacheState(cacheKey);
+}
+
+export async function deleteCacheByKey(key: string, owner: string, repo: string) {
+    const octokit = new Octokit();
+    let response;
+    try {
+        response = await octokit.rest.actions.deleteActionsCacheByKey({
+            owner: owner,
+            repo: repo,
+            key: key
+            });
+        if (response.status === 200) {
+            core.info(`Succesfully deleted cache with key: ${response.data.actions_caches[0].key}`);
+        }
+    } catch (e) {
+        if (e instanceof RequestError) {
+            let err = e as RequestError;
+            let errData = err.response?.data as any | undefined;
+            exports.logWarning(`${err.name} '${err.status}: ${errData?.message}' trying to delete cache with key: ${key}`);
+        }
+        response = e;
+    }
+    return response;
 }
 
 export function getCacheState(): string | undefined {
@@ -74,6 +101,21 @@ export function getInputAsInt(
         return undefined;
     }
     return value;
+}
+
+export function getInputAsBool(
+    name: string,
+    options?: core.InputOptions
+    ): boolean {
+        const value = core.getInput(name, options);
+        if (options) {
+            const required = (options.required || false);
+            if (required === true && value == null) {
+                throw new Error(`Required value undefined for: ${name}`);
+            }
+        }
+    const val : boolean = (value === "true" || parseInt(value) === 1);
+    return  val;
 }
 
 export function isCacheFeatureAvailable(): boolean {

@@ -32,12 +32,34 @@ async function run(): Promise<void> {
             utils.logWarning(`Error retrieving key from state.`);
             return;
         }
+        const refreshCache: boolean = utils.getInputAsBool(
+            Inputs.RefreshCache,
+            { required: false }
+        );
 
         if (utils.isExactKeyMatch(primaryKey, state)) {
-            core.info(
-                `Cache hit occurred on the primary key ${primaryKey}, not saving cache.`
-            );
-            return;
+            const { GITHUB_TOKEN, GITHUB_REPOSITORY } = process.env || null;
+            if (GITHUB_TOKEN && GITHUB_REPOSITORY && refreshCache === true) {
+                core.info(
+                    `Cache hit occurred on the primary key ${primaryKey}, attempting to refresh the contents of the cache.`
+                );
+                const [_owner, _repo] = GITHUB_REPOSITORY.split(`/`);
+                if (_owner && _repo) {
+                    await utils.deleteCacheByKey(primaryKey, _owner, _repo);
+                }
+            } else {
+                if (refreshCache === true) {
+                    utils.logWarning(
+                        `Can't refresh cache, repository info or a valid token are missing.`
+                    );
+                    return;
+                } else {
+                    core.info(
+                        `Cache hit occurred on the primary key ${primaryKey}, not saving cache.`
+                    );
+                    return;
+                }
+            }
         }
 
         const cachePaths = utils.getInputAsArray(Inputs.Path, {

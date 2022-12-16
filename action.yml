@@ -14,6 +14,10 @@ inputs:
   upload-chunk-size:
     description: 'The chunk size used to split up large files during upload, in bytes'
     required: false
+  refresh-cache:
+    description: 'Whether to try and refresh existing caches (requires GITHUB_TOKEN to be present in env)'
+    required: false
+    default: '0'
 outputs:
   cache-hit:
     description: 'A boolean value to indicate an exact match was found for the primary key'
