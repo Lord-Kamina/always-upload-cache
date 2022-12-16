@@ -4,6 +4,8 @@ import * as core from "@actions/core";
 import { Events, Inputs, State } from "./constants";
 import * as utils from "./utils/actionUtils";
 
+const { Octokit } = require("@octokit/action");
+
 // Catch and log any unhandled exceptions.  These exceptions can leak out of the uploadChunk method in
 // @actions/toolkit when a failed upload closes the file descriptor causing any in-process reads to
 // throw an uncaught exception.  Instead of failing this action, just warn.
@@ -34,10 +36,34 @@ async function run(): Promise<void> {
         }
 
         if (utils.isExactKeyMatch(primaryKey, state)) {
-            core.info(
-                `Cache hit occurred on the primary key ${primaryKey}, not saving cache.`
-            );
-            return;
+            const { GITHUB_TOKEN, GITHUB_REPOSITORY } = process.env || null
+            core.debug(`GITHUB_TOKEN: ${GITHUB_TOKEN}, GITHUB_REPOSITORY: ${GITHUB_REPOSITORY}`)
+            if(GITHUB_TOKEN && GITHUB_REPOSITORY) {
+                core.info(
+                    `Cache hit occurred on the primary key ${primaryKey}, we'll try deleting the cache key, in order to update it.`
+                );
+                const octokit = new Octokit();
+                const [owner, repo] = GITHUB_REPOSITORY.split("/");
+
+                try {
+                    await octokit.rest.actions.deleteActionsCacheByKey({
+                    owner: owner,
+                    repo: repo,
+                    key: primaryKey
+                    });
+                } catch (error) {
+                    let message
+					if (error instanceof Error) message = error.message
+					else message = String(error)
+                    console.warn(`Unable to delete cache key: ${primaryKey}. ERROR: ${message}`)
+                }
+            }
+            else {
+                core.info(
+                    `Cache hit occurred on the primary key ${primaryKey}, not saving cache.`
+                );
+                return;
+            }
         }
 
         const cachePaths = utils.getInputAsArray(Inputs.Path, {
