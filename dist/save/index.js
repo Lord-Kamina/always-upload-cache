@@ -5506,6 +5506,7 @@ var Inputs;
     Inputs["Path"] = "path";
     Inputs["RestoreKeys"] = "restore-keys";
     Inputs["UploadChunkSize"] = "upload-chunk-size";
+    Inputs["RefreshCache"] = "refresh-cache";
 })(Inputs = exports.Inputs || (exports.Inputs = {}));
 var Outputs;
 (function (Outputs) {
@@ -36387,6 +36388,7 @@ function parse(options) {
   if (["GET", "HEAD"].includes(method)) {
     url = addQueryParameters(url, remainingParameters);
   } else {
+//     console.log(`url: ${url}, method: ${method}, options: ${JSON.stringify({value:options, space:2})}`);
     if ("data" in remainingParameters) {
       body = remainingParameters.data;
     } else {
@@ -40283,10 +40285,21 @@ var __importStar = (this && this.__importStar) || function (mod) {
     __setModuleDefault(result, mod);
     return result;
 };
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.isCacheFeatureAvailable = exports.getInputAsInt = exports.getInputAsArray = exports.isValidEvent = exports.logWarning = exports.getCacheState = exports.setOutputAndState = exports.setCacheHitOutput = exports.setCacheState = exports.isExactKeyMatch = exports.isGhes = void 0;
+exports.isCacheFeatureAvailable = exports.getInputAsBool = exports.getInputAsInt = exports.getInputAsArray = exports.isValidEvent = exports.logWarning = exports.getCacheState = exports.deleteCacheByKey = exports.setOutputAndState = exports.setCacheHitOutput = exports.setCacheState = exports.isExactKeyMatch = exports.isGhes = void 0;
 const cache = __importStar(__webpack_require__(692));
 const core = __importStar(__webpack_require__(470));
+const request_error_1 = __webpack_require__(844);
+const { Octokit } = __webpack_require__(725);
 const constants_1 = __webpack_require__(196);
 function isGhes() {
     const ghUrl = new URL(process.env["GITHUB_SERVER_URL"] || "https://github.com");
@@ -40314,6 +40327,33 @@ function setOutputAndState(key, cacheKey) {
     cacheKey && setCacheState(cacheKey);
 }
 exports.setOutputAndState = setOutputAndState;
+function deleteCacheByKey(key, owner, repo) {
+    var _a;
+    return __awaiter(this, void 0, void 0, function* () {
+        const octokit = new Octokit();
+        let response;
+        try {
+            response = yield octokit.rest.actions.deleteActionsCacheByKey({
+                owner: owner,
+                repo: repo,
+                key: key
+            });
+            if (response.status === 200) {
+                core.info(`Succesfully deleted cache with key: ${response.data.actions_caches[0].key}`);
+            }
+        }
+        catch (e) {
+            if (e instanceof request_error_1.RequestError) {
+                let err = e;
+                let errData = (_a = err.response) === null || _a === void 0 ? void 0 : _a.data;
+                exports.logWarning(`${err.name} '${err.status}: ${errData === null || errData === void 0 ? void 0 : errData.message}' trying to delete cache with key: ${key}`);
+            }
+            response = e;
+        }
+        return response;
+    });
+}
+exports.deleteCacheByKey = deleteCacheByKey;
 function getCacheState() {
     const cacheKey = core.getState(constants_1.State.CacheMatchedKey);
     if (cacheKey) {
@@ -40350,6 +40390,18 @@ function getInputAsInt(name, options) {
     return value;
 }
 exports.getInputAsInt = getInputAsInt;
+function getInputAsBool(name, options) {
+    const value = core.getInput(name, options);
+    if (options) {
+        const required = (options.required || false);
+        if (required === true && value == null) {
+            throw new Error(`Required value undefined for: ${name}`);
+        }
+    }
+    const val = (value === "true" || parseInt(value) === 1);
+    return val;
+}
+exports.getInputAsBool = getInputAsBool;
 function isCacheFeatureAvailable() {
     if (!cache.isFeatureAvailable()) {
         if (isGhes()) {
@@ -43148,7 +43200,7 @@ function setup(env) {
 
 	/**
 	* Selects a color for a debug namespace
-	* @param {String} namespace The namespace string for the for the debug instance to be colored
+	* @param {String} namespace The namespace string for the debug instance to be colored
 	* @return {Number|String} An ANSI color code for the given namespace
 	* @api private
 	*/
@@ -43293,7 +43345,7 @@ function setup(env) {
 			namespaces = split[i].replace(/\*/g, '.*?');
 
 			if (namespaces[0] === '-') {
-				createDebug.skips.push(new RegExp('^' + namespaces.substr(1) + '$'));
+				createDebug.skips.push(new RegExp('^' + namespaces.slice(1) + '$'));
 			} else {
 				createDebug.names.push(new RegExp('^' + namespaces + '$'));
 			}
@@ -49957,7 +50009,6 @@ const cache = __importStar(__webpack_require__(692));
 const core = __importStar(__webpack_require__(470));
 const constants_1 = __webpack_require__(196);
 const utils = __importStar(__webpack_require__(443));
-const { Octokit } = __webpack_require__(725);
 // Catch and log any unhandled exceptions.  These exceptions can leak out of the uploadChunk method in
 // @actions/toolkit when a failed upload closes the file descriptor causing any in-process reads to
 // throw an uncaught exception.  Instead of failing this action, just warn.
@@ -49979,32 +50030,25 @@ function run() {
                 utils.logWarning(`Error retrieving key from state.`);
                 return;
             }
+            const refreshCache = utils.getInputAsBool(constants_1.Inputs.RefreshCache, { required: false });
             if (utils.isExactKeyMatch(primaryKey, state)) {
                 const { GITHUB_TOKEN, GITHUB_REPOSITORY } = process.env || null;
-                core.debug(`GITHUB_TOKEN: ${GITHUB_TOKEN}, GITHUB_REPOSITORY: ${GITHUB_REPOSITORY}`);
-                if (GITHUB_TOKEN && GITHUB_REPOSITORY) {
-                    core.info(`Cache hit occurred on the primary key ${primaryKey}, we'll try deleting the cache key, in order to update it.`);
-                    const octokit = new Octokit();
-                    const [owner, repo] = GITHUB_REPOSITORY.split("/");
-                    try {
-                        yield octokit.rest.actions.deleteActionsCacheByKey({
-                            owner: owner,
-                            repo: repo,
-                            key: primaryKey
-                        });
-                    }
-                    catch (error) {
-                        let message;
-                        if (error instanceof Error)
-                            message = error.message;
-                        else
-                            message = String(error);
-                        console.warn(`Unable to delete cache key: ${primaryKey}. ERROR: ${message}`);
+                if (GITHUB_TOKEN && GITHUB_REPOSITORY && refreshCache === true) {
+                    core.info(`Cache hit occurred on the primary key ${primaryKey}, attempting to refresh the contents of the cache.`);
+                    const [_owner, _repo] = GITHUB_REPOSITORY.split(`/`);
+                    if (_owner && _repo) {
+                        yield utils.deleteCacheByKey(primaryKey, _owner, _repo);
                     }
                 }
                 else {
-                    core.info(`Cache hit occurred on the primary key ${primaryKey}, not saving cache.`);
-                    return;
+                    if (refreshCache === true) {
+                        utils.logWarning(`Can't refresh cache, repository info or a valid token are missing.`);
+                        return;
+                    }
+                    else {
+                        core.info(`Cache hit occurred on the primary key ${primaryKey}, not saving cache.`);
+                        return;
+                    }
                 }
             }
             const cachePaths = utils.getInputAsArray(constants_1.Inputs.Path, {

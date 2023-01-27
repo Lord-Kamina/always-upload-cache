@@ -9,7 +9,7 @@ import { Outputs, RefKey, State } from "../constants";
 
 export function isGhes(): boolean {
     const ghUrl = new URL(
-        process.env["GITHUB_SERVER_URL"] || "https://github.com"
+        process.env["GITHUB_SERVER_URL"] || /* istanbul ignore next */ "https://github.com"
     );
     return ghUrl.hostname.toUpperCase() !== "GITHUB.COM";
 }
@@ -109,9 +109,9 @@ export function getInputAsBool(
     ): boolean {
         const value = core.getInput(name, options);
         if (options) {
-            const required = (options.required || false);
+            const required = (options.required ?? false);
             if (required === true && value == null) {
-                throw new Error(`Required value undefined for: ${name}`);
+                throw Error(`Required value undefined for: ${name}`);
             }
         }
     const val : boolean = (value === "true" || parseInt(value) === 1);
