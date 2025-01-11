@@ -1,6 +1,5 @@
 import * as cache from "@actions/cache";
 import * as core from "@actions/core";
-import nock from "nock";
 
 import { Events, Inputs, RefKey } from "../src/constants";
 import run from "../src/saveImpl";
@@ -8,16 +7,21 @@ import { NullStateProvider, StateProvider } from "../src/stateProvider";
 import * as actionUtils from "../src/utils/actionUtils";
 import * as testUtils from "../src/utils/testUtils";
 
+import { log } from "console";
+
 jest.mock("@actions/core");
 jest.mock("@actions/cache");
 jest.mock("../src/utils/actionUtils");
 
 beforeAll(() => {
-    nock.disableNetConnect();
     testUtils.mockServer.listen({
         onUnhandledRequest: "warn"
     });
 
+    testUtils.mockServer.events.on('request:start', ({ request }) => {
+		log('MSW intercepted:', request.method, request.url)
+	});
+	log(`mockServer handlers: \n${JSON.stringify(testUtils.mockServer.listHandlers())}\n`);
     jest.spyOn(actionUtils, "deleteCacheByKey").mockImplementation(
         (key: string, owner: string, repo: string) => {
             return jest
@@ -97,7 +101,7 @@ afterEach(() => {
 
 afterAll(() => {
     testUtils.mockServer.close();
-    nock.enableNetConnect();
+//    nock.enableNetConnect();
 });
 
 test("save with invalid event outputs warning", async () => {

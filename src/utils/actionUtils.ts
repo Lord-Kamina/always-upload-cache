@@ -34,7 +34,11 @@ export async function deleteCacheByKey(key: string, owner: string, repo: string)
         if (response.status === 200) {
             core.info(`Succesfully deleted cache with key: ${response.data.actions_caches[0].key}`);
         }
+        core.info(`response: ${JSON.stringify(response)}`);
     } catch (e) {
+    	if ((e as RequestError).status) {
+    		log(`caught a RequestError. status: ${(e as RequestError).status}, message: ${(e as RequestError).message}, request: ${JSON.stringify((e as RequestError).request)}\n`);
+    	}
         if (e instanceof RequestError) {
             let err = e as RequestError;
             let errData = err.response?.data as any | undefined;
@@ -47,7 +51,7 @@ export async function deleteCacheByKey(key: string, owner: string, repo: string)
 
 export function logWarning(message: string): void {
     const warningPrefix = "[warning]";
-    core.info(`${warningPrefix}${message}`);
+    core.info(`${warningPrefix}${message}DERPDERP`);
 }
 
 // Cache token authorized for all events that are tied to a ref

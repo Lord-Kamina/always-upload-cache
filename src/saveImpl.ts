@@ -4,6 +4,7 @@ import * as core from "@actions/core";
 import { Events, Inputs, State } from "./constants";
 import { IStateProvider } from "./stateProvider";
 import * as utils from "./utils/actionUtils";
+import { log } from "console";
 
 // Catch and log any unhandled exceptions.  These exceptions can leak out of the uploadChunk method in
 // @actions/toolkit when a failed upload closes the file descriptor causing any in-process reads to
@@ -106,6 +107,7 @@ async function saveImpl(stateProvider: IStateProvider): Promise<number | void> {
             core.info(`Cache saved with key: ${primaryKey}`);
         }
     } catch (error: unknown) {
+	    log(`Caught error: ${JSON.stringify(error)}`);
         utils.logWarning((error as Error).message);
     }
     return cacheId;
