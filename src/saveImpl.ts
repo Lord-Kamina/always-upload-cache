@@ -63,6 +63,7 @@ async function saveImpl(stateProvider: IStateProvider): Promise<number | void> {
             );
         }
         if (utils.isExactKeyMatch(primaryKey, restoredKey)) {
+            /* istanbul ignore next */
             const { GITHUB_TOKEN, GITHUB_REPOSITORY } = process.env || null;
             if (GITHUB_TOKEN && GITHUB_REPOSITORY && refreshCache === true) {
                 core.info(
