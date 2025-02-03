@@ -77572,6 +77572,7 @@ function saveImpl(stateProvider) {
                 restoredKey = yield cache.restoreCache(cachePaths, primaryKey, [], { lookupOnly: true }, enableCrossOsArchive);
             }
             if (utils.isExactKeyMatch(primaryKey, restoredKey)) {
+                /* istanbul ignore next */
                 const { GITHUB_TOKEN, GITHUB_REPOSITORY } = process.env || null;
                 if (GITHUB_TOKEN && GITHUB_REPOSITORY && refreshCache === true) {
                     core.info(`Cache hit occurred on the primary key ${primaryKey}, attempting to refresh the contents of the cache.`);
@@ -77771,7 +77772,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.isCacheFeatureAvailable = exports.getInputAsBool = exports.getInputAsInt = exports.getInputAsArray = exports.isValidEvent = exports.logWarning = exports.deleteCacheByKey = exports.isExactKeyMatch = exports.isGhes = void 0;
+exports.isCacheFeatureAvailable = exports.getInputAsBool = exports.getInputAsInt = exports.getInputAsArray = exports.isValidEvent = exports.deleteCacheByKey = exports.logWarning = exports.isExactKeyMatch = exports.isGhes = void 0;
 const cache = __importStar(__nccwpck_require__(5116));
 const core = __importStar(__nccwpck_require__(7484));
 const request_error_1 = __nccwpck_require__(3708);
@@ -77793,38 +77794,63 @@ function isExactKeyMatch(key, cacheKey) {
         }) === 0);
 }
 exports.isExactKeyMatch = isExactKeyMatch;
+function logWarning(message) {
+    const warningPrefix = "[warning]";
+    core.info(`${warningPrefix}${message}`);
+}
+exports.logWarning = logWarning;
 function deleteCacheByKey(key, owner, repo) {
     var _a;
     return __awaiter(this, void 0, void 0, function* () {
         const octokit = new Octokit();
         let response;
         try {
-            response = yield octokit.rest.actions.deleteActionsCacheByKey({
+            const gitRef = process.env[constants_1.RefKey];
+            let cacheEntry = yield octokit.rest.actions.getActionsCacheList({
                 owner: owner,
                 repo: repo,
-                key: key
+                key: key,
+                ref: gitRef
             });
-            if (response.status === 200) {
-                core.info(`Succesfully deleted cache with key: ${response.data.actions_caches[0].key}`);
+            const { data: { total_count, actions_caches } } = cacheEntry;
+            if (total_count !== 1 || total_count !== actions_caches.length) { // leave all find logic to the actual cache implementation. We just want to make sure we're returned a single element so we don't accidentally delete an entry that belongs to a different gitref.
+                if (total_count > 1) {
+                    exports.logWarning(`More than one cache entry found for key ${key}`);
+                }
+                else if (total_count === 0 || actions_caches.length === 0) {
+                    exports.logWarning(`No cache entries for key ${key} belong to gitref ${gitRef}.`);
+                }
+                // This situation is likely never actually going to come up.
+                // Istanbul is being dumb and I can't ignore this path.
+                else if (total_count !== actions_caches.length) {
+                    exports.logWarning(`Reported cache entry matches for ${key} does not match length of 'actions_caches' array in API response.`);
+                }
+                core.info(`Skip trying to delete cache entry for key ${key}.`);
+                return;
+            }
+            let id = actions_caches[0].id;
+            response = yield octokit.rest.actions.deleteActionsCacheById({
+                owner: owner,
+                repo: repo,
+                cache_id: id
+            });
+            if (response.status === 204) {
+                core.info(`Succesfully deleted cache with key: ${key}, id: ${id}`);
+                return 204;
             }
         }
         catch (e) {
             if (e instanceof request_error_1.RequestError) {
                 let err = e;
                 let errData = (_a = err.response) === null || _a === void 0 ? void 0 : _a.data;
-                exports.logWarning(`${err.name} '${err.status}: ${errData === null || errData === void 0 ? void 0 : errData.message}' trying to delete cache with key: ${key}`);
+                exports.logWarning(`Github API reported error: ${err.name} '${err.status}: ${errData === null || errData === void 0 ? void 0 : errData.message}'`);
             }
-            response = e;
+            core.info(`Couldn't delete cache entry for key ${key}.`);
+            return;
         }
-        return response;
     });
 }
 exports.deleteCacheByKey = deleteCacheByKey;
-function logWarning(message) {
-    const warningPrefix = "[warning]";
-    core.info(`${warningPrefix}${message}`);
-}
-exports.logWarning = logWarning;
 // Cache token authorized for all events that are tied to a ref
 // See GitHub Context https://help.github.com/actions/automating-your-workflow-with-github-actions/contexts-and-expression-syntax-for-github-actions#github-context
 function isValidEvent() {
